@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  redis:
+    image: redis:7-alpine
+    container_name: redis-quiz
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  aerospike:
+    image: aerospike/aerospike-server:8.0.0.0
+    container_name: aerospike-quiz
+    ports:
+      - "3000:3000"
+    volumes:
+      - aerospike_data:/opt/aerospike/data
+    environment:
+      - NAMESPACE=quiz
+    healthcheck:
+      test: ["CMD", "/opt/aerospike/bin/asinfo", "-v", "status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Quiz service with Redis backend
+  quiz-redis:
+    build: .
+    container_name: quiz-redis
+    ports:
+      - "8080:8080"
+    environment:
+      - DB_TYPE=redis
+      - REDIS_ADDR=redis:6379
+      - SERVER_PORT=8080
+    depends_on:
+      redis:
+        condition: service_healthy
+    profiles:
+      - redis
+
+  # Quiz service with Aerospike backend  
+  quiz-aerospike:
+    build: .
+    container_name: quiz-aerospike
+    ports:
+      - "8081:8080"
+    environment:
+      - DB_TYPE=aerospike
+      - AEROSPIKE_HOSTS=aerospike
+      - AEROSPIKE_PORT=3000
+      - SERVER_PORT=8080
+    depends_on:
+      aerospike:
+        condition: service_healthy
+    profiles:
+      - aerospike
+
+volumes:
+  redis_data:
+  aerospike_data:
