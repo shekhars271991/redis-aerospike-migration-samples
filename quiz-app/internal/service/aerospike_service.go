@@ -288,7 +288,7 @@ func (a *AerospikeService) StartGameSession(userID string) (string, error) {
 	}
 
 	sessionID := generateSessionID()
-	sessionKey, err := aerospike.NewKey(namespace, sessionsSet, sessionID)
+	sessionKey, err := aerospike.NewKey(namespace, usersSet, "session:"+sessionID)
 	if err != nil {
 		return "", fmt.Errorf("failed to create session key: %w", err)
 	}
@@ -300,8 +300,10 @@ func (a *AerospikeService) StartGameSession(userID string) (string, error) {
 		"active":     true,
 	}
 
-	// Create session without TTL for now to isolate the issue
-	err = a.client.Put(nil, sessionKey, bins)
+	// Create session without TTL for now (Aerospike may not allow TTL on this storage config)
+	// We'll handle expiration at the application level if needed
+	policy := aerospike.NewWritePolicy(0, 0) // No TTL for now
+	err = a.client.Put(policy, sessionKey, bins)
 	if err != nil {
 		return "", fmt.Errorf("failed to create session: %w", err)
 	}
@@ -311,7 +313,7 @@ func (a *AerospikeService) StartGameSession(userID string) (string, error) {
 
 // EndGameSession ends a game session and updates the score
 func (a *AerospikeService) EndGameSession(sessionID string, score int) error {
-	sessionKey, err := aerospike.NewKey(namespace, sessionsSet, sessionID)
+	sessionKey, err := aerospike.NewKey(namespace, usersSet, "session:"+sessionID)
 	if err != nil {
 		return fmt.Errorf("failed to create session key: %w", err)
 	}
@@ -328,6 +330,13 @@ func (a *AerospikeService) EndGameSession(sessionID string, score int) error {
 	userID, ok := record.Bins["user_id"].(string)
 	if !ok {
 		return fmt.Errorf("invalid session data")
+	}
+
+	// Check if session has expired (1 hour = 3600 seconds)
+	if startTime, ok := record.Bins["start_time"].(int); ok {
+		if time.Now().Unix()-int64(startTime) > 3600 {
+			return fmt.Errorf("session %s has expired", sessionID)
+		}
 	}
 
 	active, ok := record.Bins["active"].(bool)
@@ -351,7 +360,7 @@ func (a *AerospikeService) EndGameSession(sessionID string, score int) error {
 
 // GetGameSession retrieves a game session by sessionID
 func (a *AerospikeService) GetGameSession(sessionID string) (*models.GameSession, error) {
-	sessionKey, err := aerospike.NewKey(namespace, sessionsSet, sessionID)
+	sessionKey, err := aerospike.NewKey(namespace, usersSet, "session:"+sessionID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create session key: %w", err)
 	}
@@ -373,6 +382,12 @@ func (a *AerospikeService) GetGameSession(sessionID string) (*models.GameSession
 	}
 	if startTime, ok := record.Bins["start_time"].(int); ok {
 		session.StartTime = int64(startTime)
+		
+		// Check if session has expired (1 hour = 3600 seconds)
+		if time.Now().Unix()-int64(startTime) > 3600 {
+			// Session has expired, mark as inactive and return error
+			return nil, fmt.Errorf("session %s has expired", sessionID)
+		}
 	}
 	if active, ok := record.Bins["active"].(bool); ok {
 		session.Active = active

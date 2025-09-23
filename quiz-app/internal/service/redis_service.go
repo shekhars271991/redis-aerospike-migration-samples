@@ -58,6 +58,7 @@ func (r *RedisService) CreateUser(userID string, data map[string]interface{}) er
 		"email":        "",
 		"games_played": 0,
 		"last_score":   0,
+		"created_at":   time.Now().Unix(),
 	}
 
 	// Override with provided data
@@ -133,6 +134,7 @@ func (r *RedisService) UpdateScore(userID string, score int) error {
 	// Update user stats
 	pipe.HIncrBy(r.ctx, userKey, "games_played", 1)
 	pipe.HSet(r.ctx, userKey, "last_score", score)
+	pipe.HSet(r.ctx, userKey, "updated_at", time.Now().Unix())
 	
 	// Update leaderboard - Redis sorted sets automatically handle duplicates
 	pipe.ZAdd(r.ctx, leaderboard, redis.Z{
@@ -275,5 +277,12 @@ func (r *RedisService) GetGameSession(sessionID string) (*models.GameSession, er
 // HealthCheck checks if Redis connection is healthy
 func (r *RedisService) HealthCheck() error {
 	return r.client.Ping(r.ctx).Err()
+}
+
+// Close closes the Redis client connection
+func (r *RedisService) Close() {
+	if r.client != nil {
+		r.client.Close()
+	}
 }
 
