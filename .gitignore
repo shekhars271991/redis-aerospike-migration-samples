@@ -42,3 +42,23 @@ Thumbs.db
 
 # Docker volumes
 docker-data/
+
+# Load test client specific
+loadtest-client/results/
+loadtest-client/bin/
+*.json
+loadtest.yaml
+config.yaml
+*.local.yaml
+
+# Temporary files
+*.tmp
+*.temp
+
+# Profile files
+*.prof
+*.pprof
+
+# Coverage files
+coverage.txt
+coverage.html

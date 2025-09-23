@@ -1,0 +1,75 @@
+# Default Load Test Configuration
+# This configuration provides a balanced load test suitable for most scenarios
+
+target:
+  base_url: "http://localhost:8080"
+  timeout: "30s"
+
+load:
+  duration: "60s"           # Test duration
+  workers: 100              # Number of concurrent workers
+  ramp_up_duration: "10s"   # Gradual ramp-up time
+  target_qps: 1000          # Target queries per second
+  max_concurrency: 1000     # Maximum concurrent requests
+
+# API endpoint configurations with traffic distribution
+apis:
+  - name: "create_user"
+    method: "POST"
+    path: "/api/v1/users"
+    weight: 0.1  # 10% of traffic
+    body: |
+      {
+        "user_id": "{{.UserID}}",
+        "name": "{{.Name}}",
+        "email": "{{.Email}}"
+      }
+    headers:
+      Content-Type: "application/json"
+
+  - name: "get_user"
+    method: "GET"
+    path: "/api/v1/users/{{.UserID}}"
+    weight: 0.2  # 20% of traffic
+
+  - name: "start_game"
+    method: "POST"
+    path: "/api/v1/game/start"
+    weight: 0.3  # 30% of traffic
+    body: |
+      {
+        "user_id": "{{.UserID}}"
+      }
+    headers:
+      Content-Type: "application/json"
+
+  - name: "finish_game"
+    method: "POST"
+    path: "/api/v1/game/finish"
+    weight: 0.3  # 30% of traffic
+    body: |
+      {
+        "session_id": "{{.SessionID}}",
+        "score": {{.Score}}
+      }
+    headers:
+      Content-Type: "application/json"
+
+  - name: "get_leaderboard"
+    method: "GET"
+    path: "/api/v1/leaderboard?top={{.TopN}}"
+    weight: 0.1  # 10% of traffic
+
+# Reporting configuration
+reporting:
+  interval: "10s"                    # Report every 10 seconds
+  output_file: "loadtest_results.json"
+  detailed_stats: true
+
+# HTTP client optimization
+http:
+  max_idle_conns: 1000        # Maximum idle connections
+  max_conns_per_host: 1000    # Maximum connections per host
+  idle_conn_timeout: "90s"    # Idle connection timeout
+  disable_compression: false  # Enable compression for efficiency
+  disable_keep_alives: false  # Enable keep-alives for performance

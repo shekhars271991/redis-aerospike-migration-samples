@@ -277,7 +277,3 @@ func (r *RedisService) HealthCheck() error {
 	return r.client.Ping(r.ctx).Err()
 }
 
-// generateSessionID generates a simple session ID without external dependencies
-func generateSessionID() string {
-	return fmt.Sprintf("session_%d_%d", time.Now().UnixNano(), time.Now().Unix())
-}

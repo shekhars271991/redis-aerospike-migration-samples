@@ -1,0 +1,75 @@
+# High Load Test Configuration
+# Designed for generating massive loads (100K+ QPS) on large AWS instances
+# Optimized for maximum throughput with minimal overhead
+
+target:
+  base_url: "http://localhost:8080"
+  timeout: "10s"  # Shorter timeout for high throughput
+
+load:
+  duration: "300s"          # 5 minute test
+  workers: 2000             # High worker count for massive parallelism
+  ramp_up_duration: "30s"   # Gradual ramp-up over 30 seconds
+  target_qps: 100000        # 100K QPS target
+  max_concurrency: 5000     # High concurrency limit
+
+# Optimized API distribution for high load
+apis:
+  - name: "create_user"
+    method: "POST"
+    path: "/api/v1/users"
+    weight: 0.05  # 5% - Minimize write operations
+    body: |
+      {
+        "user_id": "{{.UserID}}",
+        "name": "{{.Name}}",
+        "email": "{{.Email}}"
+      }
+    headers:
+      Content-Type: "application/json"
+
+  - name: "get_user"
+    method: "GET"
+    path: "/api/v1/users/{{.UserID}}"
+    weight: 0.35  # 35% - Heavy read load
+
+  - name: "start_game"
+    method: "POST"
+    path: "/api/v1/game/start"
+    weight: 0.25  # 25% - Game sessions
+    body: |
+      {
+        "user_id": "{{.UserID}}"
+      }
+    headers:
+      Content-Type: "application/json"
+
+  - name: "finish_game"
+    method: "POST"
+    path: "/api/v1/game/finish"
+    weight: 0.25  # 25% - Game completions
+    body: |
+      {
+        "session_id": "{{.SessionID}}",
+        "score": {{.Score}}
+      }
+    headers:
+      Content-Type: "application/json"
+
+  - name: "get_leaderboard"
+    method: "GET"
+    path: "/api/v1/leaderboard?top={{.TopN}}"
+    weight: 0.10  # 10% - Leaderboard queries
+
+reporting:
+  interval: "10s"
+  output_file: "high_load_results.json"
+  detailed_stats: true
+
+# Optimized HTTP settings for maximum throughput
+http:
+  max_idle_conns: 10000       # Very high connection pool
+  max_conns_per_host: 10000   # Maximum connections per host
+  idle_conn_timeout: "30s"    # Shorter timeout to free connections
+  disable_compression: true   # Disable compression to reduce CPU
+  disable_keep_alives: false  # Keep connections alive

@@ -1,0 +1,75 @@
+# Stress Test Configuration
+# Designed for extreme load testing to find system breaking points
+# WARNING: This configuration can generate 1M+ QPS and may overwhelm systems
+
+target:
+  base_url: "http://localhost:8080"
+  timeout: "5s"   # Very short timeout for stress testing
+
+load:
+  duration: "120s"          # 2 minute stress test
+  workers: 5000             # Maximum worker count
+  ramp_up_duration: "20s"   # Quick ramp-up
+  target_qps: 1000000       # 1M QPS - EXTREME LOAD
+  max_concurrency: 10000    # Very high concurrency
+
+# Stress test API distribution - favor lightweight operations
+apis:
+  - name: "get_user"
+    method: "GET"
+    path: "/api/v1/users/{{.UserID}}"
+    weight: 0.4   # 40% - Read-heavy for stress
+
+  - name: "get_leaderboard"
+    method: "GET"
+    path: "/api/v1/leaderboard?top=10"  # Fixed small leaderboard
+    weight: 0.3   # 30% - Leaderboard stress
+
+  - name: "create_user"
+    method: "POST"
+    path: "/api/v1/users"
+    weight: 0.1   # 10% - Minimal writes
+    body: |
+      {
+        "user_id": "{{.UserID}}",
+        "name": "StressUser",
+        "email": "stress@test.com"
+      }
+    headers:
+      Content-Type: "application/json"
+
+  - name: "start_game"
+    method: "POST"
+    path: "/api/v1/game/start"
+    weight: 0.1   # 10% - Game starts
+    body: |
+      {
+        "user_id": "{{.UserID}}"
+      }
+    headers:
+      Content-Type: "application/json"
+
+  - name: "finish_game"
+    method: "POST"
+    path: "/api/v1/game/finish"
+    weight: 0.1   # 10% - Game finishes
+    body: |
+      {
+        "session_id": "{{.SessionID}}",
+        "score": 1000
+      }
+    headers:
+      Content-Type: "application/json"
+
+reporting:
+  interval: "5s"    # More frequent reporting for stress test
+  output_file: "stress_test_results.json"
+  detailed_stats: true
+
+# Maximum performance HTTP settings
+http:
+  max_idle_conns: 20000       # Massive connection pool
+  max_conns_per_host: 20000   # Maximum connections
+  idle_conn_timeout: "10s"    # Very short timeout
+  disable_compression: true   # No compression overhead
+  disable_keep_alives: false  # Keep connections alive

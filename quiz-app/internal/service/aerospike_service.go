@@ -2,7 +2,6 @@ package service
 
 import (
 	"fmt"
-	"sort"
 	"time"
 
 	"github.com/aerospike/aerospike-client-go/v8"
@@ -25,7 +24,7 @@ type AerospikeService struct {
 
 // NewAerospikeService creates a new Aerospike service instance
 func NewAerospikeService(hosts []*aerospike.Host) (*AerospikeService, error) {
-	client, err := aerospike.NewClient(hosts...)
+	client, err := aerospike.NewClientWithPolicyAndHost(nil, hosts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to Aerospike: %w", err)
 	}
@@ -35,8 +34,7 @@ func NewAerospikeService(hosts []*aerospike.Host) (*AerospikeService, error) {
 	}
 
 	// Initialize empty leaderboard if it doesn't exist
-	err = service.initializeLeaderboard()
-	if err != nil {
+	if err := service.initializeLeaderboard(); err != nil {
 		return nil, fmt.Errorf("failed to initialize leaderboard: %w", err)
 	}
 
@@ -164,54 +162,38 @@ func (a *AerospikeService) UpdateScore(userID string, score int) error {
 	}
 
 	// Increment games_played separately
-	incBin := aerospike.NewBin("games_played", 1)
-	err = a.client.Add(policy, key, incBin)
+	incBins := aerospike.BinMap{
+		"games_played": 1,
+	}
+	err = a.client.Add(policy, key, incBins)
 	if err != nil {
 		return fmt.Errorf("failed to increment games_played: %w", err)
 	}
 
-	// Update materialized leaderboard
-	err = a.updateMaterializedLeaderboard(userID, score)
-	if err != nil {
+	// Update leaderboard using ordered list
+	if err := a.updateLeaderboardOrderedList(userID, score); err != nil {
 		return fmt.Errorf("failed to update leaderboard: %w", err)
 	}
 
 	return nil
 }
 
-// updateMaterializedLeaderboard updates the materialized leaderboard with a new score
-func (a *AerospikeService) updateMaterializedLeaderboard(userID string, score int) error {
-	leaderboardKey, err := aerospike.NewKey(namespace, usersSet, leaderboardKey)
+// updateLeaderboardOrderedList updates the leaderboard using Aerospike ordered lists
+func (a *AerospikeService) updateLeaderboardOrderedList(userID string, score int) error {
+	leaderboardKey, err := aerospike.NewKey(namespace, "leaderboard", "global")
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create leaderboard key: %w", err)
 	}
 
-	// Get current leaderboard
-	record, err := a.client.Get(nil, leaderboardKey)
-	if err != nil {
-		return err
-	}
-
-	var topUsers []map[string]interface{}
-	if record != nil && record.Bins["top_users"] != nil {
-		if usersData, ok := record.Bins["top_users"].([]interface{}); ok {
-			for _, userData := range usersData {
-				if userMap, ok := userData.(map[string]interface{}); ok {
-					topUsers = append(topUsers, userMap)
-				}
-			}
-		}
-	}
-
-	// Get user name for the leaderboard
+	// Get user name for the leaderboard entry
 	userKey, err := aerospike.NewKey(namespace, usersSet, userID)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to create user key: %w", err)
 	}
 	
 	userRecord, err := a.client.Get(nil, userKey)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to get user record: %w", err)
 	}
 	
 	userName := userID // fallback
@@ -221,89 +203,61 @@ func (a *AerospikeService) updateMaterializedLeaderboard(userID string, score in
 		}
 	}
 
-	// Find existing user in leaderboard or add new entry
-	found := false
-	for i, user := range topUsers {
-		if userIDVal, ok := user["user_id"].(string); ok && userIDVal == userID {
-			// Update existing entry
-			topUsers[i]["score"] = score
-			topUsers[i]["name"] = userName
-			found = true
-			break
-		}
-	}
+	// Create composite leaderboard entry: [negative_score, user_id, name]
+	// We use negative score for descending order (highest scores first)
+	leaderboardEntry := []interface{}{-score, userID, userName}
 
-	if !found {
-		// Add new entry
-		topUsers = append(topUsers, map[string]interface{}{
-			"user_id": userID,
-			"name":    userName,
-			"score":   score,
-		})
-	}
-
-	// Sort by score (descending)
-	sort.Slice(topUsers, func(i, j int) bool {
-		scoreI, okI := topUsers[i]["score"].(int)
-		scoreJ, okJ := topUsers[j]["score"].(int)
-		if !okI || !okJ {
-			return false
-		}
-		return scoreI > scoreJ
-	})
-
-	// Keep only top maxLeaderboard entries
-	if len(topUsers) > maxLeaderboard {
-		topUsers = topUsers[:maxLeaderboard]
-	}
-
-	// Convert to []interface{} for Aerospike
-	topUsersInterface := make([]interface{}, len(topUsers))
-	for i, user := range topUsers {
-		topUsersInterface[i] = user
-	}
-
-	// Update leaderboard record
-	bins := aerospike.BinMap{
-		"top_users": topUsersInterface,
-		"updated":   time.Now().Unix(),
-	}
-
-	err = a.client.Put(nil, leaderboardKey, bins)
+	// Use list operations to maintain ordered leaderboard
+	policy := aerospike.NewWritePolicy(0, 0)
+	listPolicy := aerospike.NewListPolicy(aerospike.ListOrderOrdered, aerospike.ListWriteFlagsDefault)
+	
+	// Simply insert the new entry - Aerospike will maintain order automatically
+	_, err = a.client.Operate(policy, leaderboardKey,
+		aerospike.ListAppendWithPolicyOp(listPolicy, "scores", leaderboardEntry),
+	)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to append to leaderboard: %w", err)
 	}
 
 	return nil
 }
 
-// GetLeaderboard retrieves the top N users by score
+// GetLeaderboard retrieves the top N users by score from ordered list
 func (a *AerospikeService) GetLeaderboard(topN int) ([]models.UserScore, error) {
-	key, err := aerospike.NewKey(namespace, usersSet, leaderboardKey)
+	key, err := aerospike.NewKey(namespace, "leaderboard", "global")
 	if err != nil {
-		return nil, fmt.Errorf("failed to create key: %w", err)
+		return nil, fmt.Errorf("failed to create leaderboard key: %w", err)
 	}
 
+	// Get the leaderboard record
 	record, err := a.client.Get(nil, key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get leaderboard: %w", err)
+		// If the leaderboard doesn't exist yet, return empty slice
+		return []models.UserScore{}, nil
 	}
-	if record == nil {
+
+	if record == nil || record.Bins["scores"] == nil {
 		return []models.UserScore{}, nil
 	}
 
 	var leaderboardData []models.UserScore
-	if topUsersData, ok := record.Bins["top_users"].([]interface{}); ok {
+	if scoresData, ok := record.Bins["scores"].([]interface{}); ok {
+		// Limit to requested number of entries
 		limit := topN
-		if len(topUsersData) < limit {
-			limit = len(topUsersData)
+		if len(scoresData) < limit {
+			limit = len(scoresData)
 		}
 
+		// Process entries (already sorted by Aerospike with highest scores first)
 		for i := 0; i < limit; i++ {
-			if userMap, ok := topUsersData[i].(map[string]interface{}); ok {
-				userID, _ := userMap["user_id"].(string)
-				name, _ := userMap["name"].(string)
-				score, _ := userMap["score"].(int)
+			if entrySlice, ok := scoresData[i].([]interface{}); ok && len(entrySlice) >= 3 {
+				// Entry format: [negative_score, user_id, name]
+				negativeScore, _ := entrySlice[0].(int)
+				userID, _ := entrySlice[1].(string)
+				name, _ := entrySlice[2].(string)
+
+				// Convert back to positive score
+				score := -negativeScore
 
 				leaderboardData = append(leaderboardData, models.UserScore{
 					UserID: userID,
@@ -346,9 +300,8 @@ func (a *AerospikeService) StartGameSession(userID string) (string, error) {
 		"active":     true,
 	}
 
-	// Set TTL for session (1 hour)
-	policy := aerospike.NewWritePolicy(0, 3600) // 3600 seconds = 1 hour
-	err = a.client.Put(policy, sessionKey, bins)
+	// Create session without TTL for now to isolate the issue
+	err = a.client.Put(nil, sessionKey, bins)
 	if err != nil {
 		return "", fmt.Errorf("failed to create session: %w", err)
 	}
@@ -383,8 +336,7 @@ func (a *AerospikeService) EndGameSession(sessionID string, score int) error {
 	}
 
 	// Update user score
-	err = a.UpdateScore(userID, score)
-	if err != nil {
+	if err := a.UpdateScore(userID, score); err != nil {
 		return fmt.Errorf("failed to update user score: %w", err)
 	}
 
@@ -432,8 +384,11 @@ func (a *AerospikeService) GetGameSession(sessionID string) (*models.GameSession
 // HealthCheck checks if Aerospike connection is healthy
 func (a *AerospikeService) HealthCheck() error {
 	// Try to get cluster info
-	_, err := a.client.GetNodes()
-	return err
+	nodes := a.client.GetNodes()
+	if len(nodes) == 0 {
+		return fmt.Errorf("no Aerospike nodes available")
+	}
+	return nil
 }
 
 // Close closes the Aerospike client connection
@@ -443,7 +398,3 @@ func (a *AerospikeService) Close() {
 	}
 }
 
-// generateSessionID generates a simple session ID without external dependencies
-func generateSessionID() string {
-	return fmt.Sprintf("session_%d_%d", time.Now().UnixNano(), time.Now().Unix())
-}
