@@ -2,7 +2,9 @@
 # ------------------------------------------------------------
 # The output document must follow this exact structure.
 # Do not add or remove any sections beyond what is defined below.
-# Maintain all headings and markdown formatting exactly as written.
+# Maintain all headings and markdown formatting exactly as written.\
+
+# Read through migration-strategy.md to make sure you understand the full picture of the task
 
 # Expected Markdown Document Structure
 
@@ -201,7 +203,38 @@
 #       * Lua UDFs cannot update Ordered Lists.
 #
 # ---------------------------------------------------------------------
-# Template 6: Redis Pub/Sub or Stream Data (Skip Mapping)
+# Template 6: Redis JSON Data
+# ---------------------------------------------------------------------
+# Description:
+#   RedisJSON data type for storing structured JSON documents.
+#   Map directly to Aerospike Map and Ordered List bins.
+#
+# Example:
+#   Redis Command:
+#     JSON.SET "user:123" $ '{"name": "John", "age": 30, "roles": ["admin", "editor"]}'
+#
+#   Aerospike Mapping:
+#     ### Redis Key: "user:123"
+#     Aerospike Mapping:
+#     - Namespace: users
+#     - Set: profile_json
+#     - Record Key: userId
+#     - Bins:
+#       - data (Map):
+#           name: "John"
+#           age: 30
+#           roles (Ordered List): ["admin", "editor"]
+#     Notes:
+#     - Represent JSON objects as Aerospike Maps.
+#     - Represent JSON arrays as Aerospike Ordered Lists.
+#     - Nested JSON objects can be stored as nested Maps.
+#     - Limitations:
+#       * Record size limited by max-record-size.
+#       * No schema enforcement for nested fields.
+#       * Lua UDFs cannot modify deeply nested list/map structures.
+#
+# ---------------------------------------------------------------------
+# Template 7: Redis Pub/Sub or Stream Data (Skip Mapping)
 # ---------------------------------------------------------------------
 # Description:
 #   Transient or streaming data (redis.publish, redis.subscribe).
@@ -216,7 +249,7 @@
 #     - Mark these as "Skipped (Pub/Sub)" in documentation.
 #
 # ---------------------------------------------------------------------
-# Template 7: Generic or Unknown Structure (Skip Mapping)
+# Template 8: Generic or Unknown Structure (Skip Mapping)
 # ---------------------------------------------------------------------
 # Description:
 #   Keys that do not match recognized Redis data structures.
@@ -232,7 +265,6 @@
 # ---------------------------------------------------------------------
 # End of Aerospike Mapping Templates
 # ---------------------------------------------------------------------
-
 
 # 4. SECTION 4: Validation Checklist
 # ------------------------------------------------------------

@@ -90,7 +90,6 @@ func getEnvAsInt(key string, defaultValue int) int {
 	}
 	return defaultValue
 }
-
 // getEnvAsSlice gets an environment variable as slice or returns a default value
 func getEnvAsSlice(key string, defaultValue []string) []string {
 	if value := os.Getenv(key); value != "" {
@@ -98,3 +97,4 @@ func getEnvAsSlice(key string, defaultValue []string) []string {
 	}
 	return defaultValue
 }
+
