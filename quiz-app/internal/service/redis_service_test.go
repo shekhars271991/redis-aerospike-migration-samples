@@ -17,5 +17,5 @@ func TestGenerateSessionID(t *testing.T) {
 	}
 }
 
-// Note: Integration tests would require Redis/Aerospike instances
+// Note: Integration tests would require a Redis instance
 // For production, you would add comprehensive integration tests here

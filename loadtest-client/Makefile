@@ -33,10 +33,6 @@ quick-test:
 test-redis:
 	./bin/loadtest --url http://localhost:8080 --duration 60s --qps 5000 --workers 200
 
-# Test against Aerospike backend  
-test-aerospike:
-	./bin/loadtest --url http://localhost:8081 --duration 60s --qps 5000 --workers 200
-
 # Generate sample configuration
 generate-config:
 	./bin/loadtest --config /dev/null --help

@@ -236,13 +236,10 @@ Results are automatically exported to JSON for analysis:
 - Maximum system stress
 - **WARNING**: Can overwhelm systems
 
-### 4. Backend Comparison
+### 4. Custom Endpoint Testing
 ```bash
 # Test Redis backend
 make test-redis
-
-# Test Aerospike backend  
-make test-aerospike
 ```
 
 ## AWS Deployment

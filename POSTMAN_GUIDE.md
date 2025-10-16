@@ -99,26 +99,10 @@ The environment includes these variables:
 | Variable | Description | Default Value |
 |----------|-------------|---------------|
 | `base_url` | Main API endpoint | `http://localhost:8080` |
-| `redis_url` | Redis backend URL | `http://localhost:8080` |
-| `aerospike_url` | Aerospike backend URL | `http://localhost:8081` |
 | `user_id` | Auto-generated user ID | (dynamic) |
 | `session_id` | Auto-generated session ID | (dynamic) |
 | `alice_id` | Test user Alice ID | `alice123` |
 | `bob_id` | Test user Bob ID | `bob456` |
-
-### **Switching Between Backends**
-
-To test different backends:
-
-1. **Redis Backend** (default):
-   ```
-   base_url = http://localhost:8080
-   ```
-
-2. **Aerospike Backend**:
-   ```
-   base_url = http://localhost:8081
-   ```
 
 ## 🧪 Automated Testing Features
 

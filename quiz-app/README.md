@@ -1,28 +1,23 @@
 # Quiz App - Leaderboard Service
 
-A production-ready Go backend service providing a clean DB service interface for quiz/game leaderboards with dual backend implementations (Redis and Aerospike).
+A production-ready Go backend service providing a clean DB service interface for quiz/game leaderboards with Redis backend.
 
 ## Features
 
 - **Clean Architecture**: Uses dependency injection with a common DB service interface
-- **Dual Backend Support**: Redis and Aerospike implementations
+- **Redis Backend**: High-performance Redis implementation
 - **RESTful API**: HTTP endpoints using Gin framework
 - **Production Ready**: Proper error handling, logging, and graceful shutdown
 - **Docker Support**: Complete containerization with Docker Compose
 
 ## Architecture
 
-### Database Implementations
+### Database Implementation
 
 #### Redis Backend
 - **Strings**: Game sessions with TTL (1 hour expiration)
 - **Hashes**: User profiles with structured data
 - **Sorted Sets**: Real-time leaderboard with automatic sorting
-
-#### Aerospike Backend
-- **User Records**: Single record per user in `users` set with bins: `{name, email, games_played, last_score}`
-- **Materialized Leaderboard**: Maintains a `leaderboard:top` record with list of top N users
-- **Game Sessions**: Temporary session records with TTL
 
 ### API Endpoints
 
@@ -46,7 +41,7 @@ A production-ready Go backend service providing a clean DB service interface for
 ### Prerequisites
 - Go 1.23+
 - Docker and Docker Compose (optional)
-- Redis or Aerospike server
+- Redis server
 
 ### Installation
 
@@ -67,18 +62,6 @@ make run
 
 The service will start on `http://localhost:8080`
 
-### Using Aerospike
-
-1. Start Aerospike:
-```bash
-make aerospike-run
-```
-
-2. Run with Aerospike backend:
-```bash
-make run-aerospike
-```
-
 ### Docker Compose
 
 Start everything with Docker:
@@ -87,11 +70,8 @@ Start everything with Docker:
 # With Redis backend
 docker-compose --profile redis up -d
 
-# With Aerospike backend  
-docker-compose --profile aerospike up -d
-
-# Just the databases
-docker-compose up -d redis aerospike
+# Just Redis database
+docker-compose up -d redis
 ```
 
 ## Configuration
@@ -103,16 +83,12 @@ Configure the service using environment variables:
 - `SERVER_PORT` - Server port (default: "8080")
 
 ### Database Selection
-- `DB_TYPE` - Database type: "redis" or "aerospike" (default: "redis")
+- `DB_TYPE` - Database type: "redis" (default: "redis")
 
 ### Redis Configuration
 - `REDIS_ADDR` - Redis address (default: "localhost:6379")
 - `REDIS_PASSWORD` - Redis password (default: "")
 - `REDIS_DB` - Redis database number (default: 0)
-
-### Aerospike Configuration
-- `AEROSPIKE_HOSTS` - Comma-separated list of hosts (default: "localhost")
-- `AEROSPIKE_PORT` - Aerospike port (default: 3000)
 
 ## Usage Examples
 
@@ -175,11 +151,9 @@ curl "http://localhost:8080/api/v1/users/user1"
 ### Available Make Commands
 - `make build` - Build the application
 - `make run` - Run with Redis backend
-- `make run-aerospike` - Run with Aerospike backend
 - `make test` - Run tests
 - `make deps` - Install dependencies
 - `make redis-run` - Start Redis container
-- `make aerospike-run` - Start Aerospike container
 - `make docker-up` - Start all services with Docker
 - `make clean` - Clean build artifacts
 
@@ -207,11 +181,7 @@ make build-prod
 - Uses pipelining for atomic operations
 - Sorted sets provide O(log N) insertion and range queries
 - Session data has automatic TTL expiration
-
-### Aerospike Backend
-- Materialized leaderboard for fast queries
-- Single-record transactions for consistency
-- Configurable TTL for session management
+- Excellent performance for read and write operations
 
 ## Monitoring
 
@@ -227,9 +197,6 @@ docker build -t quiz-app .
 
 # Run with Redis
 docker run --rm -p 8080:8080 -e DB_TYPE=redis quiz-app
-
-# Run with Aerospike
-docker run --rm -p 8080:8080 -e DB_TYPE=aerospike quiz-app
 ```
 
 ### Docker Compose
@@ -238,12 +205,8 @@ docker run --rm -p 8080:8080 -e DB_TYPE=aerospike quiz-app
 # Start with Redis backend
 docker-compose --profile redis up -d
 
-# Start with Aerospike backend
-docker-compose --profile aerospike up -d
-
 # View logs
 docker-compose logs -f quiz-redis
-docker-compose logs -f quiz-aerospike
 ```
 
 ## API Documentation

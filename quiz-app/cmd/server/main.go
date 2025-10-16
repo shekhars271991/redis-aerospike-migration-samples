@@ -20,25 +20,17 @@ func main() {
 
 	// Initialize database service based on configuration
 	var dbService service.DBService
-	var err error
 
-	switch cfg.Database.Type {
-	case "redis":
-		log.Println("Initializing Redis service...")
-		dbService = service.NewRedisService(
-			cfg.Redis.Addr,
-			cfg.Redis.Password,
-			cfg.Redis.DB,
-		)
-	case "aerospike":
-		log.Println("Initializing Aerospike service...")
-		dbService, err = service.NewAerospikeService(cfg.GetAerospikeHosts())
-		if err != nil {
-			log.Fatalf("Failed to initialize Aerospike service: %v", err)
-		}
-	default:
-		log.Fatalf("Unsupported database type: %s", cfg.Database.Type)
+	if cfg.Database.Type != "redis" {
+		log.Fatalf("Unsupported database type: %s (only redis is supported)", cfg.Database.Type)
 	}
+	
+	log.Println("Initializing Redis service...")
+	dbService = service.NewRedisService(
+		cfg.Redis.Addr,
+		cfg.Redis.Password,
+		cfg.Redis.DB,
+	)
 
 	// Test database connection
 	log.Println("Testing database connection...")
@@ -76,11 +68,6 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 	log.Println("Shutting down server...")
-
-	// Cleanup
-	if aerospikeService, ok := dbService.(*service.AerospikeService); ok {
-		aerospikeService.Close()
-	}
 
 	log.Println("Server shutdown complete")
 }
