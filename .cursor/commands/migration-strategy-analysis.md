@@ -1,171 +1,403 @@
 # =====================================================================
 # migration-strategy-analysis.md
 # =====================================================================
-# Step 0: Redis → Aerospike Migration Strategy Analysis
+# Database Migration Strategy Analysis (Redis → Aerospike)
 # =====================================================================
 # Purpose:
-#   Analyze the project codebase to identify files involved in Redis usage,
-#   classify them by their architectural role, and determine which files
-#   require modification or creation during the Aerospike migration.
+#   Analyze the project codebase to identify Redis usage patterns, classify
+#   operations by data structure type, and generate a phased migration
+#   strategy with comprehensive testing approach.
 #
-#   The output must clearly specify:
-#     - Files to be updated (existing Redis references)
-#     - Files to be created (new Aerospike DAOs, migration scripts, tests)
-#     - Optional or manual review files
-#     - A short, consistent summary of migration steps and technical notes
+#   This command is GENERIC - it adapts to whatever Redis usage it finds
+#   in the codebase, whether that's user management, caching, sessions,
+#   leaderboards, queues, or any other use case.
 #
 # Output:
 #   migration-strategy.md
 # =====================================================================
 
-scan_codebase_structure:
-  include_extensions: [.py, .js, .ts, .go, .java]
-  exclude_paths:
-    - tests/
-    - node_modules/
-    - build/
-    - dist/
-    - venv/
-    - target/
-    - __pycache__/
+# ------------------------------------------------------------
+# Step 1: Discover Redis Usage Patterns
+# ------------------------------------------------------------
+# Scan the codebase to identify ALL Redis operations and classify
+# them by data structure type and operation pattern.
+
+analyze_redis_usage:
+  scan_codebase:
+    include_extensions: [.py, .js, .ts, .go, .java, .rb, .php]
+    exclude_paths:
+      - tests/
+      - node_modules/
+      - build/
+      - dist/
+      - venv/
+      - vendor/
+      - target/
+      - __pycache__/
+  
   detect_patterns:
-    # Redis usage indicators
+    # Redis client imports and initialization
     - "import redis"
     - "from redis"
-    - "redis."
-    - "redisClient"
-    - "StrictRedis("
     - "Redis("
-    - "hset"
-    - "hget"
-    - "set"
-    - "setex"
-    - "get"
-    - "zadd"
-    - "lpush"
-    - "sadd"
-    - "del"
-    - "exists"
-  classify_files:
-    - Identify all files containing Redis client usage or references.
-    - Categorize each as one of the following:
-        * DAO / Repository layer (data access or persistence code)
-        * Service / Business layer (mixed Redis + logic)
-        * Utility / Cache helper layer (lightweight caching or ephemeral storage)
-    - Exclude files with no Redis usage from the final output.
-    - Detect any interface abstractions (DAO interfaces, repository contracts).
-  output_to: migration-strategy.md
-  output_format:
-    - File Path
-    - Observed Redis Usage (commands/functions)
-    - Layer Type (DAO / Service / Utility / Unknown)
-    - Architectural Notes
+    - "redis.NewClient"
+    - "createClient"
+    
+    # Data structure operations
+    redis_strings: ["set", "get", "setex", "getset", "incr", "decr"]
+    redis_hashes: ["hset", "hget", "hgetall", "hmset", "hincrby", "hdel"]
+    redis_lists: ["lpush", "rpush", "lpop", "rpop", "lrange", "llen"]
+    redis_sets: ["sadd", "smembers", "srem", "sismember", "scard"]
+    redis_sorted_sets: ["zadd", "zrange", "zrevrange", "zrank", "zscore", "zincrby"]
+    redis_keys: ["exists", "del", "expire", "ttl", "keys", "scan"]
+    redis_transactions: ["pipeline", "multi", "exec", "watch"]
+    redis_pubsub: ["publish", "subscribe", "unsubscribe"]
+  
+  classify_by_structure:
+    # For each file found, identify which Redis data structures are used
+    # This drives the phasing strategy
+    - String operations (simple key-value, counters, flags)
+    - Hash operations (structured data, records)
+    - List operations (queues, timelines, activity feeds)
+    - Set operations (unique collections, tags, relationships)
+    - Sorted Set operations (rankings, leaderboards, time-series)
+    - TTL/Expiration patterns (sessions, caches, temporary data)
+    - Transaction patterns (atomic operations, pipelines)
+    - Pub/Sub patterns (event streaming - not migrated)
+  
+  classify_by_layer:
+    # Architectural classification
+    - DAO/Repository layer (direct data access)
+    - Service/Business layer (Redis + business logic)
+    - Cache layer (ephemeral storage)
+    - Session management (user sessions)
+    - Queue/Job processing (async tasks)
+    - Utility/Helper layer (shared Redis functions)
+  
+  output_analysis:
+    - Total Redis files identified
+    - Data structures used (breakdown by type)
+    - Operation complexity (read-only, write-heavy, mixed)
+    - Transaction usage (pipeline, atomic operations)
+    - TTL usage patterns
+    - Interface abstractions detected (if any)
 
 # ------------------------------------------------------------
-# 2. Generate Impacted Files Summary
+# Step 2: Generate Impacted Files Summary
 # ------------------------------------------------------------
-# The model must only include relevant files — those that require
-# modification, creation, or manual review. Each file should be placed
-# under one of three tables with concise descriptions.
-#
-# Rules for consistency:
-#   - Do NOT include files that have no Redis usage.
-#   - Do NOT modify Redis test files; create new Aerospike test files instead.
-#   - For tests: mark Redis test files as “Retain” and add new Aerospike tests.
+# Create three categorized tables of files that need attention
 
-generate_impacted_files_summary:
-  input_file: migration-strategy.md
-  replace_section: "## 2. Impacted Files Summary"
-  structure:
-    - Heading: "### A. Files to be Updated"
-      Columns: ["File Path", "Change Type", "Description of Required Update"]
-      Rules:
-        * Include only necessary modifications (config, main, build files).
-        * Redis service files should be marked **Deprecate**, not Modify.
-        * Redis test files should NOT be modified here.
-        * Keep descriptions concise and action-oriented.
-    - Heading: "### B. Files to be Created"
-      Columns: ["File Path", "Purpose", "Description"]
-      Rules:
-        * Include Aerospike DAO/service implementations.
-        * Include **new test files** for Aerospike (`*_aerospike_test.go`).
-        * Include migration scripts and setup documentation.
-    - Heading: "### C. Optional Files (Manual Review)"
-      Columns: ["File Path", "Reason for Review", "Suggested Action"]
-      Rules:
-        * Include interface definitions, shared models, or indirect dependencies.
-        * Provide short notes on what to verify manually.
-
-# ------------------------------------------------------------
-# 3. Generate Migration Plan Summary
-# ------------------------------------------------------------
-# A concise, consistent, stepwise migration plan with no variation in structure.
-
-generate_migration_plan:
-  input_file: migration-strategy.md
-  replace_section: "## 3. Migration Plan Summary"
-  format: |
-    ## 3. Migration Plan Summary
-    1. Implement Aerospike DAO/service (`aerospike_service.go`).
-    2. Create new Aerospike test suite (`aerospike_service_test.go`).
-    3. Implement Redis → Aerospike data migration script.
-    4. Update configuration to default to Aerospike.
-    5. Replace Redis container with Aerospike in Docker setup.
-    6. Validate functionality through integration tests.
-    7. Remove Redis dependencies after successful validation.
+generate_impacted_files:
+  section: "## 2. Impacted Files Summary"
+  
+  files_to_update:
+    include:
+      - Configuration files (environment, settings)
+      - Main/entry point files (initialization)
+      - Build/deployment files (dependencies, containers)
+      - Interface definitions (if abstraction exists)
+    exclude:
+      - Test files (will create new ones instead)
+      - Source service files (will deprecate, not modify)
+    columns: ["File Path", "Change Type", "Description"]
+  
+  files_to_create:
+    include:
+      - New Aerospike service/DAO implementation
+      - New test suites for Aerospike
+      - Data migration scripts
+      - Validation scripts
+      - Deployment/setup documentation
+    columns: ["File Path", "Purpose", "Description"]
+  
+  files_for_review:
+    include:
+      - Interface contracts (verify compatibility)
+      - Data models (verify field compatibility)
+      - Indirect dependencies
+      - Configuration templates
+    columns: ["File Path", "Reason for Review", "Suggested Action"]
 
 # ------------------------------------------------------------
-# 4. Generate Technical Notes
+# Step 3: Generate Dynamic Phased Migration Plan
 # ------------------------------------------------------------
-# Always append consistent data model mapping and operational equivalence notes.
+# Create phases dynamically based on discovered Redis usage.
+# Each phase focuses on a specific data structure or operation pattern.
+
+generate_phased_plan:
+  section: "## 3. Phased Migration Plan with Testing Strategy"
+  
+  introduction: |
+    ### Migration Approach
+    This migration follows a phased approach where each phase:
+    1. **Pre-Migration Tests**: Establish baseline behavior with Redis
+    2. **Implementation**: Build Aerospike equivalent functionality  
+    3. **Post-Migration Tests**: Verify Aerospike matches Redis behavior
+    4. **Validation Tests**: Compare outputs, performance, and data integrity
+    5. **Rollback Plan**: Clear path to revert if issues arise
+    
+    Each phase is independently testable and can be rolled back without
+    affecting other phases.
+  
+  # Phase generation rules - adapt based on what's found
+  phase_generation_rules:
+    always_include:
+      - phase: "Foundation & Infrastructure"
+        triggers: [always]
+        objective: "Set up Aerospike infrastructure and basic connectivity"
+        includes:
+          - Dependency installation
+          - Configuration setup
+          - Container/deployment setup
+          - Basic service initialization
+          - Health check implementation
+        pre_tests:
+          - Run existing test suite (baseline)
+          - Document performance metrics
+          - Verify test coverage
+        post_tests:
+          - Connection establishment
+          - Health check validation
+          - Configuration parsing
+        validation:
+          - Infrastructure stability
+          - Configuration correctness
+        success_criteria:
+          - Service initializes without errors
+          - Health check passes
+        rollback: "Remove Aerospike config, continue Redis-only"
+    
+    conditional_phases:
+      - phase: "Simple Key-Value Operations"
+        triggers: [has_string_operations]
+        data_structures: ["Redis Strings"]
+        operations: ["GET", "SET", "SETEX", "INCR", "DECR"]
+        objective: "Migrate simple key-value storage"
+        aerospike_mapping: "String → Single-bin Record"
+        
+      - phase: "Structured Data (Hash-based)"
+        triggers: [has_hash_operations]
+        data_structures: ["Redis Hashes"]
+        operations: ["HSET", "HGET", "HGETALL", "HINCRBY"]
+        objective: "Migrate hash-based structured data"
+        aerospike_mapping: "Hash → Multi-bin Record"
+        
+      - phase: "Ordered Collections (Lists)"
+        triggers: [has_list_operations]
+        data_structures: ["Redis Lists"]
+        operations: ["LPUSH", "RPUSH", "LRANGE", "LPOP"]
+        objective: "Migrate list-based ordered collections"
+        aerospike_mapping: "List → Ordered List bin"
+        
+      - phase: "Unique Collections (Sets)"
+        triggers: [has_set_operations]
+        data_structures: ["Redis Sets"]
+        operations: ["SADD", "SMEMBERS", "SREM"]
+        objective: "Migrate set-based unique collections"
+        aerospike_mapping: "Set → Ordered List bin (with uniqueness)"
+        
+      - phase: "Ranked Collections (Sorted Sets)"
+        triggers: [has_sortedset_operations]
+        data_structures: ["Redis Sorted Sets"]
+        operations: ["ZADD", "ZRANGE", "ZREVRANGE", "ZRANK"]
+        objective: "Migrate sorted sets with scores/rankings"
+        aerospike_mapping: "Sorted Set → Ordered List with score tracking or Secondary Index"
+        complexity: "HIGH"
+        note: "Most complex migration - requires careful design"
+        
+      - phase: "TTL & Expiration Patterns"
+        triggers: [has_ttl_operations]
+        data_structures: ["Any with TTL"]
+        operations: ["SETEX", "EXPIRE", "TTL"]
+        objective: "Migrate time-based expiration"
+        aerospike_mapping: "TTL → Record-level expiration (WritePolicy)"
+        
+      - phase: "Atomic Operations & Transactions"
+        triggers: [has_pipeline_or_multi]
+        data_structures: ["Multiple"]
+        operations: ["PIPELINE", "MULTI/EXEC", "WATCH"]
+        objective: "Ensure atomic multi-operation consistency"
+        aerospike_mapping: "Pipeline → Batch operations, Multi → Operate()"
+        
+      - phase: "Data Migration & Dual-Write"
+        triggers: [always]
+        objective: "Migrate historical data and enable parallel writes"
+        includes:
+          - Snapshot existing Redis data
+          - Batch migration script
+          - Dual-write implementation
+          - Data consistency validation
+        
+      - phase: "Integration Testing & Cutover"
+        triggers: [always]
+        objective: "Full system testing and production switchover"
+        includes:
+          - End-to-end testing
+          - Load testing
+          - Performance validation
+          - Primary database switch
+        
+      - phase: "Cleanup & Decommission"
+        triggers: [always]
+        objective: "Remove Redis dependencies"
+        includes:
+          - Remove old service code
+          - Remove dependencies
+          - Update documentation
+  
+  # Testing template for each phase
+  testing_template_per_phase:
+    pre_migration_tests:
+      - "Capture baseline behavior from Redis"
+      - "Document current performance metrics"
+      - "Record expected outputs for validation"
+      - "Verify test coverage for operations"
+    
+    implementation_steps:
+      - "List specific methods/functions to implement"
+      - "Define data structure mappings"
+      - "Specify error handling requirements"
+    
+    post_migration_tests:
+      - "Test Aerospike implementation in isolation"
+      - "Verify data structure compatibility"
+      - "Test error handling and edge cases"
+      - "Validate type conversions if any"
+    
+    validation_tests:
+      - "Side-by-side comparison (Redis vs Aerospike)"
+      - "Performance benchmarking"
+      - "Data integrity checks"
+      - "Load testing if applicable"
+    
+    success_criteria:
+      - "Functional parity with Redis"
+      - "Performance within acceptable range"
+      - "No data loss or corruption"
+      - "All tests passing"
+    
+    rollback_plan:
+      - "Clear steps to revert changes"
+      - "No impact on previous phases"
+
+# ------------------------------------------------------------
+# Step 4: Generate Technical Notes & Considerations
+# ------------------------------------------------------------
+# High-level technical notes about the migration
+# (Detailed data model mappings handled by separate map-data-models command)
 
 generate_technical_notes:
-  append_to: migration-strategy.md
-  section_title: "## 4. Technical Notes"
-  include_details:
-    - Redis Hash → Aerospike Record mapping
-    - Redis Sorted Set → Aerospike Ordered List mapping
-    - Redis String with TTL → Aerospike Record with TTL
-    - Operational equivalents (batch, pipeline, expiration)
-    - Known limitations (record size, type conversion, ordered list behavior)
+  section: "## 4. Technical Notes"
+  
+  include_overview:
+    - Summary of Redis data structures discovered
+    - High-level Aerospike equivalents overview
+    - Reference to detailed data modeling document
+    - Key architectural differences to consider
+  
+  operational_considerations:
+    - Connection management and pooling
+    - Transaction and atomicity patterns
+    - Performance characteristics comparison
+    - Migration complexity assessment
+  
+  key_differences:
+    - Type system (Redis strings vs Aerospike native types)
+    - Record size limitations (1MB default, 8MB max)
+    - Data structure equivalents (hashes, lists, sorted sets)
+    - TTL and expiration handling
+    - Batch operations and pipelines
+  
+  recommendations:
+    - Run detailed data modeling analysis (use map-data-models command)
+    - Establish performance baselines before migration
+    - Plan for data validation and reconciliation
+    - Consider phased rollout strategy
+  
+  next_steps:
+    - Execute map-data-models command for detailed mappings
+    - Review data model compatibility
+    - Validate Aerospike schema design
+    - Create data migration scripts
 
 # ------------------------------------------------------------
-# 5. Enforce Consistent Output Format
+# Step 5: Enforce Consistent Output Format
 # ------------------------------------------------------------
-# Ensure output always follows the same layout and section order.
 
 validate_output:
-  ensure_sections_present:
-    - "# Redis → Aerospike Migration Strategy Analysis"
+  required_sections:
+    - "# Database Migration Strategy: Redis → Aerospike"
     - "## 1. Overview"
     - "## 2. Impacted Files Summary"
-    - "## 3. Migration Plan Summary"
+    - "## 3. Phased Migration Plan with Testing Strategy"
     - "## 4. Technical Notes"
-  ensure_section_order: true
-  ensure_no_extra_sections: true
-  ensure_tables_have_data: true
-  ensure_overview_is_concise: true
-  enforce_uniform_markdown_style: true
+  
+  overview_requirements:
+    - Current architecture summary
+    - Redis usage statistics (files, operations, data structures)
+    - Migration approach summary
+    - Complexity assessment
+  
+  consistency_rules:
+    - Professional and concise tone
+    - Numbered steps in migration plan
+    - Tables for file changes
+    - Code examples in fenced blocks
+    - Clear success criteria for each phase
+    - Explicit rollback plans
 
 # ------------------------------------------------------------
-# 6. Output Consistency Profile
+# Step 6: Create Jira Validation Task
 # ------------------------------------------------------------
-# Ensures that wording, section order, and style remain consistent
-# across runs and repositories.
 
-consistency_profile:
-  tone: "Professional and concise"
-  perspective: "Architectural summary for migration readiness"
-  format_rules:
-    - Always use numbered steps in Migration Plan Summary
-    - Use tables for file changes (Updated, Created, Optional)
-    - Exclude completed phase summaries or verbose narratives
-    - Use same Markdown heading structure for every report
-    - Use consistent terminology:
-        * “Deprecate” for Redis files being removed
-        * “Create” for new Aerospike equivalents
-        * “Modify” for configuration/build files
-  output_filename: migration-strategy.md
+create_jira_task:
+  trigger: "After migration-strategy.md is successfully generated"
+  project_key: "SCRUM"
+  task_details:
+    summary: "Review and validate Redis → Aerospike migration strategy"
+    issue_type: "Task"
+    priority: "High"
+    description: |
+      A migration strategy document has been generated and requires validation.
+      
+      **Document:** `migration-strategy.md`
+      
+      **Strategy Validation Checklist:**
+      - [ ] All Redis usage patterns identified
+      - [ ] File classification is accurate (DAO/Service/Cache)
+      - [ ] Files to update/create lists are complete
+      - [ ] Migration phases are logical and well-defined
+      - [ ] Each phase has clear pre/post testing strategy
+      - [ ] Data model mappings are technically sound
+      - [ ] Rollback plans are feasible
+      - [ ] Success criteria are measurable
+      - [ ] Performance expectations are realistic
+      - [ ] No missing dependencies or edge cases
+      
+      **Key Review Areas:**
+      - **Section 1:** Overview - verify completeness
+      - **Section 2:** Impacted files - validate all files identified
+      - **Section 3:** Phased plan - review phase breakdown and testing
+      - **Section 4:** Technical notes - review high-level considerations
+      
+      **Next Steps:**
+      - Once strategy approved, run /map-data-models for detailed mappings
+      - Create phase-specific implementation tasks
+      - Set up test baseline (Phase 1 pre-tests)
+      - Begin infrastructure setup
+      
+      **Generated:** {timestamp}
+    labels: ["migration", "redis", "aerospike", "strategy", "review"]
+  
+  notification:
+    message: |
+      ✅ Migration strategy analysis complete!
+      📄 Document: migration-strategy.md
+      🎫 Jira task created: {issue_key}
+      🔗 {issue_url}
+      
+      📊 Review the phased migration plan with testing strategy
+      🧪 Each phase includes pre/post tests and validation
 
 # =====================================================================
 # END OF FILE

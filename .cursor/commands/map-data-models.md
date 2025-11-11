@@ -300,3 +300,62 @@
 # 6. Always use the file name: data-modeling-guidelines.md
 # 7. When regenerated, existing sections should be replaced in place.
 # 8. Do not add timestamps, version info, or author information.
+
+# ------------------------------------------------------------
+# 5. Create Jira Validation Task
+# ------------------------------------------------------------
+# After generating the data-modeling-guidelines.md document, automatically
+# create a Jira task for the user to review and validate the data model mappings.
+
+create_jira_task:
+  trigger: "After data-modeling-guidelines.md is successfully generated"
+  project_key: "SCRUM"
+  task_details:
+    summary: "Review and validate Redis → Aerospike data model mappings"
+    issue_type: "Task"
+    priority: "High"
+    description: |
+      A data modeling guidelines document has been generated and requires validation.
+      
+      **Document:** `data-modeling-guidelines.md`
+      
+      **Validation Checklist:**
+      - [ ] All Redis call sites have been captured in Section 1
+      - [ ] Each Redis key is mapped to an appropriate Aerospike model
+      - [ ] Bin definitions match existing Redis field names
+      - [ ] No structural changes introduced without approval
+      - [ ] Namespace and Set names are appropriate
+      - [ ] TTL requirements are documented
+      - [ ] Ordered List usage for Redis Lists/Sets/Sorted Sets is correct
+      - [ ] Special cases (Pub/Sub, Streams) are properly marked as skipped
+      - [ ] Record size limitations are considered
+      
+      **Key Areas to Review:**
+      - **Section 1:** Redis data access patterns - verify completeness
+      - **Section 2:** Aerospike mappings - validate technical accuracy
+      - **Section 3:** (If present) Special considerations
+      - **Section 4:** Validation checklist completion
+      
+      **Common Issues to Check:**
+      - Ensure Sorted Sets use Ordered Lists with score tracking
+      - Verify TTL is set at record level, not bin level
+      - Confirm record size won't exceed 1MB limit (default)
+      - Check that hash fields map one-to-one to bins
+      
+      **Next Steps:**
+      - Once validated, proceed with implementing data migration scripts
+      - Address any mapping concerns or edge cases
+      - Update implementation plan based on data model
+      
+      **Generated:** {timestamp}
+    labels: ["migration", "redis", "aerospike", "data-model", "review"]
+  notification:
+    message: |
+      ✅ Data modeling guidelines generated!
+      📄 Document: data-modeling-guidelines.md
+      🎫 Jira task created: {issue_key} - Review and validate data model mappings
+      🔗 {issue_url}
+
+# =====================================================================
+# END OF FILE
+# =====================================================================
