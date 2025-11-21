@@ -319,15 +319,24 @@ create_jira_tasks:
           "redis-aerospike",
           "phase-{phase_number}",
           "{task.task_type}",
-          "{task.complexity}"
+          "{task.complexity}",
+          "epic-{epic_key}"  # Link to Epic via label instead of parent field
         ]
-        custom_fields:
-          task_sequence: "{task_id}"
-          phase: "{phase_name}"
-          estimated_hours: "{hours}"
+        # NOTE: Do NOT use "parent" field for Epic linkage in Jira Cloud
+        # Epic linkage handled via labels or custom Epic Link field
+        # Parent field is ONLY for subtask → parent task relationships
+  
+  error_handling:
+    # If Jira MCP creation fails (API errors, auth issues, etc.):
+    # 1. Continue generating task-sequence.json locally
+    # 2. Log Jira errors but don't block execution
+    # 3. Set jira_key to "PENDING-{task_id}" in task-sequence.json
+    # 4. Include instructions in output for manual Jira sync
+    # 5. code-iterate-go can still execute based on local sequence
   
   link_dependencies:
     # After all tasks created, link them in Jira
+    # Skip if Jira creation failed
     for_each_dependency:
       create_issue_link:
         type: "Blocks"
